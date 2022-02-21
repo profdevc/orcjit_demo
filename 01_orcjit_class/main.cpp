@@ -1,3 +1,9 @@
+/*
+Ref: https://releases.llvm.org/13.0.0/docs/tutorial/BuildingAJIT2.html
+Usage:
+clang++ -g main.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit support nativecodegen` -O3 -o main.cpp.o
+./main.cpp.o -f mul_func.ll -f mul_main.ll
+*/
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
@@ -12,6 +18,7 @@
 #include "llvm/Support/TargetSelect.h"
 
 #include "orcjit.h"
+#include <unistd.h>
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -38,7 +45,53 @@ ThreadSafeModule createDemoModule(char *fileName)
   return ThreadSafeModule(std::move(M), std::move(Context));
 }
 
-int main()
+int opt = 0;
+
+inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
+{
+  while ((opt = getopt(argc, argv, "f:")) != -1)
+  {
+    switch (opt)
+    {
+    case 'f':
+    {
+      if (access(optarg, 0) == -1)
+      {
+        printf("Given input file invalid\n");
+        exit(-1);
+      }
+      else
+      {
+        std::string a = optarg;
+        if (a.substr(a.find_last_of('.'), a.length() - a.find_last_of('.')) == ".ll")
+        {
+          auto M = createDemoModule((char *)(optarg));
+          ExitOnErr(TheJIT->addModule(std::move(M), *RT));
+          printf("Module %s has been add to JIT\n", optarg);
+        }
+        else
+        {
+          printf("%s: file format must be .ll\n", optarg);
+          exit(-1);
+        }
+      }
+      break;
+    }
+    case '?':
+      if (optopt == 'f')
+        fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+      else if (isprint(optopt))
+        fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+      else
+        fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+      printf("option usage error\n");
+      exit(-1);
+      break;
+    }
+  }
+}
+
+int main(int argc, char **argv)
 {
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter();
@@ -46,11 +99,7 @@ int main()
   TheJIT = ExitOnErr(OrcJIT::Create());
   InitializeModule();
   auto RT = TheJIT->getMainJITDylib().createResourceTracker();
-  auto M1 = createDemoModule((char *)("mul_func.ll"));
-  ExitOnErr(TheJIT->addModule(std::move(M1), RT));
-  auto M = createDemoModule((char *)("mul_main.ll"));
-  ExitOnErr(TheJIT->addModule(std::move(M), RT));
-
+  parse_opt(argc, argv, &RT);
   // Look up the JIT'd function, cast it to a function pointer, then call it.
 
   auto main_sym = ExitOnErr(TheJIT->lookup("main"));
