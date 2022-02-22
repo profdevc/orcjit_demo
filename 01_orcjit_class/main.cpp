@@ -2,7 +2,8 @@
 Ref: https://releases.llvm.org/13.0.0/docs/tutorial/BuildingAJIT2.html
 Usage:
 clang++ -g main.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit support nativecodegen` -O3 -o main.cpp.o
-./main.cpp.o -f mul_func.ll -f mul_main.ll
+clang++ -S -emit-llvm mul_main.cpp -o mul_main.ll
+./main.cpp.o -f mul_main.ll
 */
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"

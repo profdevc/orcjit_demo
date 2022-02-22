@@ -1,5 +1,5 @@
 #include <iostream>
-#include "mul_func.h"
+#include "mul_func.hpp"
 using namespace std;
 
 extern "C"
