@@ -2,8 +2,7 @@
 Ref: https://releases.llvm.org/13.0.0/docs/tutorial/BuildingAJIT2.html
 Usage:
 clang++ -g main.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit support nativecodegen` -O3 -o main.cpp.o
-clang++ -S -emit-llvm mul_main.cpp -o mul_main.ll
-./main.cpp.o -f mul_main.ll
+./main.cpp.o -f mul_main.cpp
 */
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
@@ -20,6 +19,7 @@ clang++ -S -emit-llvm mul_main.cpp -o mul_main.ll
 
 #include "orcjit.h"
 #include <unistd.h>
+#include <ctime>
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -64,15 +64,26 @@ inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
       else
       {
         std::string a = optarg;
-        if (a.substr(a.find_last_of('.'), a.length() - a.find_last_of('.')) == ".ll")
+        if (a.substr(a.find_last_of('.'), a.length() - a.find_last_of('.')) == ".cpp")
         {
-          auto M = createDemoModule((char *)(optarg));
+          std::string al = a.substr(0, a.find_last_of('.')) + ".ll";
+          std::string cmd = "clang++ -S -emit-llvm " + a + " -o " + al;
+          FILE *cmdp = NULL;
+          cmdp = popen(cmd.c_str(), "r");
+          if (!cmdp)
+          {
+            perror("popen");
+            exit(EXIT_FAILURE);
+          }
+          else
+            printf("clang++: emit %s to %s\n", a.c_str(), al.c_str());
+          auto M = createDemoModule((char *)(al.c_str()));
           ExitOnErr(TheJIT->addModule(std::move(M), *RT));
-          printf("Module %s has been add to JIT\n", optarg);
+          printf("Module %s has been add to JIT\n", al.c_str());
         }
         else
         {
-          printf("%s: file format must be .ll\n", optarg);
+          printf("%s: file format must be .cpp\n", optarg);
           exit(-1);
         }
       }
