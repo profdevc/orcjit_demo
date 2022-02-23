@@ -47,10 +47,12 @@ ThreadSafeModule createDemoModule(char *fileName)
 }
 
 int opt = 0;
+char **_argv;
+char *main_file_name;
 
-inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
+inline void parse_opt(int argc, char **argv, int &_argc, ResourceTrackerSP &RT)
 {
-  while ((opt = getopt(argc, argv, "f:")) != -1)
+  while ((opt = getopt(argc, argv, "f:t:")) != -1)
   {
     switch (opt)
     {
@@ -58,7 +60,7 @@ inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
     {
       if (access(optarg, 0) == -1)
       {
-        printf("Given input file invalid\n");
+        printf("Given input file: %s is invalid\n", optarg);
         exit(-1);
       }
       else
@@ -78,8 +80,10 @@ inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
           else
             printf("clang++: emit %s to %s\n", a.c_str(), al.c_str());
           auto M = createDemoModule((char *)(al.c_str()));
-          ExitOnErr(TheJIT->addModule(std::move(M), *RT));
+          ExitOnErr(TheJIT->addModule(std::move(M), RT));
           printf("Module %s has been add to JIT\n", al.c_str());
+          if (bool(TheJIT->lookup("main")))
+            main_file_name = optarg;
         }
         else
         {
@@ -89,8 +93,32 @@ inline void parse_opt(int argc, char **argv, ResourceTrackerSP *RT)
       }
       break;
     }
+    case 't':
+    {
+      int currind = optind - 1;
+      while (argv[currind + _argc])
+        _argc++;
+      if (_argc > 0)
+      {
+        _argv = (char **)malloc((_argc + 1) * sizeof(char *));
+        _argv[0] = (char *)malloc(strlen(main_file_name) * sizeof(char));
+        strcpy(_argv[0], main_file_name);
+        for (int i = 0; i < _argc; i++)
+        {
+          _argv[i + 1] = (char *)malloc(strlen(argv[currind + i]) * sizeof(char));
+          strcpy(_argv[i + 1], argv[currind + i]);
+        }
+        printf("\nArgs: ");
+        for (int i = 1; i <= _argc; i++)
+          printf("%s ", _argv[i]);
+        printf("has been transfered to main() in %s\n", main_file_name);
+      }
+      else
+        printf("No agrs need to be transfered to main() in %s\n", main_file_name);
+      break;
+    }
     case '?':
-      if (optopt == 'f')
+      if (optopt == 'f' || optopt == 't')
         fprintf(stderr, "Option -%c requires an argument.\n", optopt);
       else if (isprint(optopt))
         fprintf(stderr, "Unknown option `-%c'.\n", optopt);
@@ -111,15 +139,28 @@ int main(int argc, char **argv)
   TheJIT = ExitOnErr(OrcJIT::Create());
   InitializeModule();
   auto RT = TheJIT->getMainJITDylib().createResourceTracker();
-  parse_opt(argc, argv, &RT);
+  int _argc = 0;
+  printf("\n--------   Adding Module  --------\n");
+  parse_opt(argc, argv, _argc, RT);
   // Look up the JIT'd function, cast it to a function pointer, then call it.
 
   auto main_sym = ExitOnErr(TheJIT->lookup("main"));
-  int (*main_f)() = (int (*)())main_sym.getAddress();
+  int (*main_f)(int, char **) = (int (*)(int, char **))main_sym.getAddress();
 
-  int Result = main_f();
+  printf("\n-------- Executing Module --------\n");
+  int Result = main_f(_argc, _argv);
 
-  outs() << "main_f() = " << Result << "\n";
+  // Return value of function
+  // outs() << "main_f() = " << Result << "\n";
+
   ExitOnErr(RT->remove());
+
+  if (_argc > 0)
+  {
+    for (int i = 0; i < _argc + 1; i++)
+      free((void *)_argv[i]);
+    free((void *)_argv);
+  }
+  printf("\n");
   return 0;
 }
