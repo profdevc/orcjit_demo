@@ -53,7 +53,7 @@ int main(int argc, char **argv)
     std::string InputFilell = InputFile;
     if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
     {
-      InputFilell = InputFile.substr(0, InputFile.find_last_of('.')) + ".ll";
+      InputFilell = InputFile + ".ll";
       std::string cmd = "clang++ -S -emit-llvm " + InputFile + " -o " + InputFilell;
       FILE *cmdp = NULL;
       cmdp = popen(cmd.c_str(), "r");
@@ -88,6 +88,8 @@ int main(int argc, char **argv)
   auto Main =
       jitTargetAddressToFunction<int (*)(int, char *[])>(MainSym.getAddress());
 
-  printf("\n-------- Executing Module --------\n");
-  return runAsMain(Main, InputArgv, StringRef(InputFiles.front()));
+  printf("\n----  Executing Module Main  -----\n");
+  if(!runAsMain(Main, InputArgv, StringRef(InputFiles.front())))
+  printf("\n---------  End Execution  --------\n\n");
+  return 0;
 }
