@@ -1,10 +1,13 @@
 /*
 Ref: https://releases.llvm.org/13.0.0/docs/tutorial/index.html#building-a-jit-in-llvm
 Usage:
-  Compile
-    clang++ -g main.cpp `llvm-config --cxxflags --ldflags --system-libs --libs core orcjit support nativecodegen` -O3 -o main.cpp.o
-  execute
-    ./main.cpp.o file1.cpp file2.cpp --args para1 para2
+  build:
+    mkdir build
+    cd build
+    cmake ..
+    make
+  execute:
+    ./OrcJIT file1.cpp file2.cpp --args para1 para2
 */
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
 #include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
@@ -40,6 +43,7 @@ int main(int argc, char **argv)
 {
   InitializeNativeTarget();
   InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmParser();
 
   TheJIT = ExitOnErr(OrcJIT::Create());
   printf("\n--------   Adding Module  --------\n");

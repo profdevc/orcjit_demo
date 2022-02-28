@@ -33,3 +33,6 @@
 
 # llvm
 *.ll
+
+## build
+*/build/
