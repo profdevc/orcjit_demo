@@ -7,7 +7,7 @@ Usage:
     cmake ..
     make
   execute:
-    ./OrcJIT file1.cpp file2.cpp --args para1 para2
+    ./OrcJIT file1.cpp file2.cpp --args para1 para2 --num-threads NumThreads
 */
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
 #include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
@@ -34,6 +34,10 @@ static cl::list<std::string> InputArgv("args", cl::Positional,
                                        cl::desc("<program arguments>..."),
                                        cl::ZeroOrMore, cl::PositionalEatsArgs);
 
+static cl::opt<unsigned> NumThreads("num-threads", cl::Optional,
+                                    cl::desc("Number of compile threads"),
+                                    cl::init(2));
+
 static std::unique_ptr<OrcJIT> TheJIT;
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
@@ -45,7 +49,7 @@ int main(int argc, char **argv)
   InitializeNativeTargetAsmPrinter();
   InitializeNativeTargetAsmParser();
 
-  TheJIT = ExitOnErr(OrcJIT::Create());
+  TheJIT = ExitOnErr(OrcJIT::Create(NumThreads));
   printf("\n--------   Adding Module  --------\n");
   cl::ParseCommandLineOptions(argc, argv, "OrcJIT");
 

@@ -22,39 +22,24 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/ThreadPool.h"
+
+#include <list>
+#include <string>
+
 #include <memory>
 
 namespace llvm
 {
     namespace orc
     {
-
         class OrcJIT
         {
-        private:
-            std::unique_ptr<ExecutionSession> ES;
-            std::unique_ptr<EPCIndirectionUtils> EPCIU;
-
-            DataLayout DL;
-            MangleAndInterner Mangle;
-
-            RTDyldObjectLinkingLayer ObjectLayer;
-            IRCompileLayer CompileLayer;
-            IRTransformLayer OptimizeLayer;
-            CompileOnDemandLayer CODLayer;
-
-            JITDylib &MainJD;
-
-            static void handleLazyCallThroughError()
-            {
-                errs() << "LazyCallThrough error: Could not find function body";
-                exit(1);
-            }
-
         public:
             OrcJIT(std::unique_ptr<ExecutionSession> ES,
                    std::unique_ptr<EPCIndirectionUtils> EPCIU,
-                   JITTargetMachineBuilder JTMB, DataLayout DL)
+                   JITTargetMachineBuilder JTMB, DataLayout DL,std::unique_ptr<DynamicLibrarySearchGenerator> ProcessSymbolsGenerator)
                 : ES(std::move(ES)), EPCIU(std::move(EPCIU)), DL(std::move(DL)),
                   Mangle(*this->ES, this->DL),
                   ObjectLayer(*this->ES,
@@ -62,17 +47,22 @@ namespace llvm
                               { return std::make_unique<SectionMemoryManager>(); }),
                   CompileLayer(*this->ES, ObjectLayer,
                                std::make_unique<ConcurrentIRCompiler>(std::move(JTMB))),
+                  MainJD(this->ES->createBareJITDylib("<main>")),
                   OptimizeLayer(*this->ES, CompileLayer, optimizeModule),
                   CODLayer(*this->ES, OptimizeLayer,
                            this->EPCIU->getLazyCallThroughManager(),
                            [this]
-                           { return this->EPCIU->createIndirectStubsManager(); }),
-                  MainJD(this->ES->createBareJITDylib("<main>"))
-            {
-                MainJD.addGenerator(
-                    cantFail(DynamicLibrarySearchGenerator::GetForCurrentProcess(
-                        DL.getGlobalPrefix())));
-            }
+                           { return this->EPCIU->createIndirectStubsManager(); }){
+                               MainJD.addGenerator(std::move(ProcessSymbolsGenerator));
+                               this->ES->setDispatchTask(
+                                    [this](std::unique_ptr<Task> T) {
+                                    CompileThreads.async(
+                                        [UnownedT = T.release()]() {
+                                            std::unique_ptr<Task> T(UnownedT);
+                                            T->run();
+                                        });
+                                    });
+                           }
 
             ~OrcJIT()
             {
@@ -80,15 +70,18 @@ namespace llvm
                     ES->reportError(std::move(Err));
                 if (auto Err = EPCIU->cleanup())
                     ES->reportError(std::move(Err));
+                    CompileThreads.wait();
             }
 
-            static Expected<std::unique_ptr<OrcJIT>> Create()
+            static Expected<std::unique_ptr<OrcJIT>> Create(unsigned NumThreads)
             {
                 auto EPC = SelfExecutorProcessControl::Create();
                 if (!EPC)
                     return EPC.takeError();
 
                 auto ES = std::make_unique<ExecutionSession>(std::move(*EPC));
+
+                auto CompileThreads={llvm::hardware_concurrency(NumThreads)};
 
                 auto EPCIU = EPCIndirectionUtils::Create(ES->getExecutorProcessControl());
                 if (!EPCIU)
@@ -107,8 +100,14 @@ namespace llvm
                 if (!DL)
                     return DL.takeError();
 
+                auto ProcessSymbolsSearchGenerator =
+                    DynamicLibrarySearchGenerator::GetForCurrentProcess(
+                        DL->getGlobalPrefix());
+                if (!ProcessSymbolsSearchGenerator)
+                return ProcessSymbolsSearchGenerator.takeError();
+
                 return std::make_unique<OrcJIT>(std::move(ES), std::move(*EPCIU),
-                                                std::move(JTMB), std::move(*DL));
+                                                std::move(JTMB), std::move(*DL),std::move(*ProcessSymbolsSearchGenerator));
             }
 
             const DataLayout &getDataLayout() const { return DL; }
@@ -129,26 +128,48 @@ namespace llvm
             }
 
         private:
+            std::unique_ptr<ExecutionSession> ES;
+            std::unique_ptr<EPCIndirectionUtils> EPCIU;
+
+            ThreadPool CompileThreads;
+
+            DataLayout DL;
+            MangleAndInterner Mangle;
+
+            RTDyldObjectLinkingLayer ObjectLayer;
+            IRCompileLayer CompileLayer;
+            IRTransformLayer OptimizeLayer;
+            CompileOnDemandLayer CODLayer;
+
+            JITDylib &MainJD;
+
+            static void handleLazyCallThroughError()
+            {
+                errs() << "LazyCallThrough error: Could not find function body";
+                exit(1);
+            }
+
+
             static Expected<ThreadSafeModule>
             optimizeModule(ThreadSafeModule TSM, const MaterializationResponsibility &R)
             {
                 TSM.withModuleDo([](Module &M)
-                                 {
-                                     // Create a function pass manager.
-                                     auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
+                    {
+                        // Create a function pass manager.
+                        auto FPM = std::make_unique<legacy::FunctionPassManager>(&M);
 
-                                     // Add some optimizations.
-                                     FPM->add(createInstructionCombiningPass());
-                                     FPM->add(createReassociatePass());
-                                     FPM->add(createGVNPass());
-                                     FPM->add(createCFGSimplificationPass());
-                                     FPM->doInitialization();
+                        // Add some optimizations.
+                        FPM->add(createInstructionCombiningPass());
+                        FPM->add(createReassociatePass());
+                        FPM->add(createGVNPass());
+                        FPM->add(createCFGSimplificationPass());
+                        FPM->doInitialization();
 
-                                     // Run the optimizations over all functions in the module being added to
-                                     // the JIT.
-                                     for (auto &F : M)
-                                         FPM->run(F);
-                                 });
+                        // Run the optimizations over all functions in the module being added to
+                        // the JIT.
+                        for (auto &F : M)
+                            FPM->run(F);
+                    });
 
                 return std::move(TSM);
             }
