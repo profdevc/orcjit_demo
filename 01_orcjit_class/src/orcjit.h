@@ -32,6 +32,7 @@
 
 namespace llvm
 {
+    ExitOnError ExitOnErre;
     namespace orc
     {
         class OrcJIT
@@ -62,6 +63,8 @@ namespace llvm
                                             T->run();
                                         });
                                     });
+                                    LocalCXXRuntimeOverrides CXXRuntimeoverrides;
+                                    ExitOnErre(CXXRuntimeoverrides.enable(MainJD, Mangle));
                            }
 
             ~OrcJIT()
