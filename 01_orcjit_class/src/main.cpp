@@ -7,7 +7,7 @@ Usage:
     cmake ..
     make
   execute:
-    ./OrcJIT file1.cpp file2.cpp --args para1 para2 --num-threads NumThreads
+    ./OrcJIT file1.cpp file2.cpp --args args1 args2 --num-threads NumThreads
 */
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
 #include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
@@ -15,7 +15,6 @@ Usage:
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"

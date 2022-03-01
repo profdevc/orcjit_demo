@@ -25,11 +25,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ThreadPool.h"
 
-#include <list>
-#include <string>
-
-#include <memory>
-
 namespace llvm
 {
     ExitOnError ExitOnErre;
@@ -63,8 +58,8 @@ namespace llvm
                                             T->run();
                                         });
                                     });
-                                    LocalCXXRuntimeOverrides CXXRuntimeoverrides;
-                                    ExitOnErre(CXXRuntimeoverrides.enable(MainJD, Mangle));
+                                LocalCXXRuntimeOverrides CXXRuntimeoverrides;
+                                ExitOnErre(CXXRuntimeoverrides.enable(MainJD, Mangle));
                            }
 
             ~OrcJIT()
