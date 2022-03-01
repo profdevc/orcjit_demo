@@ -1,4 +1,5 @@
 # Ref: https://stackoverflow.com/questions/52931852/how-to-convert-llvm-clang-command-line-to-cmake-config
+# Ref: https://github.com/LoranceChen/simple-lang/blob/master/CMakeLists.txt
 cmake_minimum_required(VERSION 3.0)
 set(CMAKE_CXX_STANDARD 14)
 SET(CMAKE_C_COMPILER /usr/local/bin/clang)
@@ -43,7 +44,8 @@ if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
 elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
     set(Arch_asmparser AArch64AsmParser)
 else()
-    message("Unsupport architecture.You can modify CMakeLists Line 46 according to your architecture")
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_HOST_SYSTEM_PROCESSOR.html
+    message("Unsupport architecture.You can modify CMakeLists Line 46 according to your architecture") 
 endif()
 
 # Find the libraries that correspond to the LLVM components
