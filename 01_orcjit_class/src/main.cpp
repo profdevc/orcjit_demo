@@ -7,7 +7,8 @@ Usage:
     cmake ..
     make
   execute:
-    ./OrcJIT file1.cpp file2.cpp --args args1 args2 --num-threads NumThreads
+    ./OrcJIT file1.cpp file2.cpp dir3/ dir4/ --args args1 args2 --num-threads NumThreads
+    (support file and (all .cpp and .ll in ) directionary)
 */
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
 #include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
@@ -23,6 +24,9 @@ Usage:
 #include "orcjit.h"
 #include <unistd.h>
 #include <iostream>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <set>
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -43,20 +47,8 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static ExitOnError ExitOnErr;
 
-int main(int argc, char **argv)
-{
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter();
-  InitializeNativeTargetAsmParser();
-
-  TheJIT = ExitOnErr(OrcJIT::Create(NumThreads));
-  printf("\n--------   Adding Module  --------\n");
-  cl::ParseCommandLineOptions(argc, argv, "OrcJIT");
-
-  //add modules to jit
-  for (const auto &InputFile : InputFiles)
-  {
-    SMDiagnostic Err;
+void AddModule(std::string InputFile, char **argv){
+  SMDiagnostic Err;
     auto Ctx = std::make_unique<LLVMContext>();
     std::string InputFilell = InputFile;
     if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
@@ -84,11 +76,68 @@ int main(int argc, char **argv)
     if (!M)
     {
       Err.print(argv[0], errs());
-      return 1;
+      exit(-1);
     }
 
     ExitOnErr(TheJIT->addModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
     printf("Module %s has been add to JIT\n", InputFilell.c_str());
+}
+
+int main(int argc, char **argv)
+{
+  InitializeNativeTarget();
+  InitializeNativeTargetAsmPrinter();
+  InitializeNativeTargetAsmParser();
+
+  TheJIT = ExitOnErr(OrcJIT::Create(NumThreads));
+  printf("\n--------   Adding Module  --------\n");
+  cl::ParseCommandLineOptions(argc, argv, "OrcJIT");
+
+  //add modules to jit
+  for (const auto &InputFile : InputFiles)
+  {
+    struct stat s;
+    if(stat(InputFile.c_str(),&s)==0){
+      if(s.st_mode&S_IFDIR){
+        DIR *pdir;
+        struct dirent* ptr;
+        if(!(pdir=opendir(InputFile.c_str()))){
+          perror("pdir error");
+          exit(-1);
+        }
+        std::set<std::string> fn;
+        while((ptr=readdir(pdir))!=nullptr){
+          if((!strncmp(ptr->d_name, ".", 1)) || (!strncmp(ptr->d_name, "..", 2)))
+            continue;
+
+          std::string filename=ptr->d_name;
+          std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
+          if(suffix == ".cpp"){
+            fn.insert(filename);
+            AddModule(InputFile + filename, argv);
+          }
+        }
+        while((ptr=readdir(pdir))!=nullptr){
+          if((!strncmp(ptr->d_name, ".", 1)) || (!strncmp(ptr->d_name, "..", 2)))
+            continue;
+
+          std::string filename=ptr->d_name;
+          std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
+          if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 3)))
+            AddModule(InputFile + filename, argv);
+        }
+      }else if(s.st_mode&S_IFREG){  //file
+        AddModule(InputFile.c_str(), argv);
+      }else{
+        printf("stat: '%s' is neither a directionary nor a file, what is it???\n",InputFile.c_str());
+        exit(-1);
+      }
+    }
+    else{
+      printf("%s: Invalid file name/directionary\n",InputFile.c_str());
+      exit(-1);
+    }
+    
   }
 
   // Look up the JIT'd function, cast it to main function pointer, then call it.
