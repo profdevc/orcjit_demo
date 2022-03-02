@@ -22,6 +22,7 @@ Usage:
 
 #include "orcjit.h"
 #include <unistd.h>
+#include <iostream>
 
 using namespace llvm;
 using namespace llvm::orc;
