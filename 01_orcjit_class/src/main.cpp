@@ -54,8 +54,20 @@ void AddModule(std::string InputFile, char **argv){
     if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
     {
       InputFilell = InputFile + ".ll";
-      std::string cmd = "clang++ -S -emit-llvm " + InputFile + " -o " + InputFilell;
       FILE *cmdp = NULL;
+      if(!access(InputFilell.c_str(),F_OK)){
+        std::string rmcmd = "rm " + InputFilell;
+        printf("%s\n",rmcmd.c_str());
+        cmdp = popen(rmcmd.c_str(), "r");
+        if (!cmdp)
+        {
+          perror("popen");
+          exit(EXIT_FAILURE);
+        }
+      }
+      std::string cmd = "clang++ -S -emit-llvm " + InputFile + " -o " + InputFilell;
+      while(!access(InputFilell.c_str(),F_OK));
+      cmdp = NULL;
       cmdp = popen(cmd.c_str(), "r");
       if (!cmdp)
       {
@@ -64,6 +76,7 @@ void AddModule(std::string InputFile, char **argv){
       }
       else
         printf("clang++: emit %s to %s\n", InputFile.c_str(), InputFilell.c_str());
+      while(access(InputFilell.c_str(),F_OK));
     }
     else if ((InputFile).substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
     {
