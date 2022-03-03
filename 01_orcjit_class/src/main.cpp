@@ -7,7 +7,7 @@ Usage:
     cmake ..
     make
   execute:
-    ./OrcJIT file1.cpp file2.cpp dir3/ dir4/ --args args1 args2 --num-threads NumThreads
+    ./OrcJIT file1.cpp file2.cpp dir3/ dir4/ --cl-emit-flags clang++_emit-llvm_flags1 --args args1 args2 --num-threads NumThreads
     (support file and (all .cpp and .ll in ) directionary)
 */
 #include "llvm/ExecutionEngine/JITLink/EHFrameSupport.h"
@@ -38,6 +38,10 @@ static cl::list<std::string> InputArgv("args", cl::Positional,
                                        cl::desc("<program arguments>..."),
                                        cl::ZeroOrMore, cl::PositionalEatsArgs);
 
+static cl::list<std::string> ClEmitFlags("cl-emit-flags", cl::Positional,
+                                       cl::desc("<program arguments>..."),
+                                       cl::ZeroOrMore, cl::PositionalEatsArgs);
+
 static cl::opt<unsigned> NumThreads("num-threads", cl::Optional,
                                     cl::desc("Number of compile threads"),
                                     cl::init(2));
@@ -65,7 +69,10 @@ void AddModule(std::string InputFile, char **argv){
           exit(EXIT_FAILURE);
         }
       }
-      std::string cmd = "clang++ -S -emit-llvm " + InputFile + " -o " + InputFilell;
+      std::string cmd = "clang++ -S ";
+      for (const auto& ClEmitFlag : ClEmitFlags)
+        cmd += ClEmitFlag + " ";
+      cmd += "-emit-llvm " + InputFile + " -o " + InputFilell;
       while(!access(InputFilell.c_str(),F_OK));
       cmdp = NULL;
       cmdp = popen(cmd.c_str(), "r");
