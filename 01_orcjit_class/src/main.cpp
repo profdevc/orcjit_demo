@@ -39,7 +39,7 @@ static cl::list<std::string> InputArgv("args", cl::Positional,
                                        cl::ZeroOrMore, cl::PositionalEatsArgs);
 
 static cl::list<std::string> ClEmitFlags("cl-emit-flags", cl::Positional,
-                                       cl::desc("<program arguments>..."),
+                                       cl::desc("<clang emit llvm flags>..."),
                                        cl::ZeroOrMore, cl::PositionalEatsArgs);
 
 static cl::opt<unsigned> NumThreads("num-threads", cl::Optional,
@@ -72,7 +72,7 @@ void AddModule(std::string InputFile, char **argv){
       std::string cmd = "clang++ -S ";
       for (const auto& ClEmitFlag : ClEmitFlags)
         cmd += ClEmitFlag + " ";
-      cmd += "-emit-llvm " + InputFile + " -o " + InputFilell;
+      cmd += "-emit-llvm " + InputFile + " -O3 -o " + InputFilell;
       while(!access(InputFilell.c_str(),F_OK));
       cmdp = NULL;
       cmdp = popen(cmd.c_str(), "r");
