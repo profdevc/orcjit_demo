@@ -23,11 +23,8 @@ Usage:
 
 #include "orcjit.h"
 #include <unistd.h>
-#include <iostream>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <set>
-#include <vector>
 #include <pthread.h>
 
 using namespace llvm;
@@ -63,42 +60,42 @@ std::set<std::string> fn;
 void* AddModule(void* fn){
   std::string InputFile = (char*)fn;
   SMDiagnostic Err;
-    auto Ctx = std::make_unique<LLVMContext>();
-    std::string InputFilell = InputFile;
-    if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
+  auto Ctx = std::make_unique<LLVMContext>();
+  std::string InputFilell = InputFile;
+  if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
+  {
+    InputFilell += ".ll";
+    FILE *cmdp = NULL;
+    std::string cmd = "clang++ -S ";
+    for (const auto& ClEmitFlag : ClEmitFlags)
+      cmd += ClEmitFlag + " ";
+    cmd += "-emit-llvm " + InputFile + " -O3 -o " + InputFilell;
+    cmdp = popen(cmd.c_str(), "r");
+    if (!cmdp)
     {
-      InputFilell += ".ll";
-      FILE *cmdp = NULL;
-      std::string cmd = "clang++ -S ";
-      for (const auto& ClEmitFlag : ClEmitFlags)
-        cmd += ClEmitFlag + " ";
-      cmd += "-emit-llvm " + InputFile + " -O3 -o " + InputFilell;
-      cmdp = popen(cmd.c_str(), "r");
-      if (!cmdp)
-      {
-        perror("popen");
-        exit(EXIT_FAILURE);
-      }
-      else
-        printf("clang++: emit %s to %s\n", InputFile.c_str(), InputFilell.c_str());
-      while(access(InputFilell.c_str(),F_OK));
+      perror("popen");
+      exit(EXIT_FAILURE);
     }
-    else if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
-    {
-      printf("%s: file format must be .cpp\n", InputFile.c_str());
-      exit(-1);
-    }
+    else
+      printf("clang++: emit %s to %s\n", InputFile.c_str(), InputFilell.c_str());
+    while(access(InputFilell.c_str(),F_OK));
+  }
+  else if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
+  {
+    printf("%s: file format must be .cpp\n", InputFile.c_str());
+    exit(-1);
+  }
 
-    auto M = parseIRFile(InputFilell, Err, *Ctx);
-    if (!M)
-    {
-      Err.print(Progn.c_str(), errs());
-      exit(-1);
-    }
+  auto M = parseIRFile(InputFilell, Err, *Ctx);
+  if (!M)
+  {
+    Err.print(Progn.c_str(), errs());
+    exit(-1);
+  }
 
-    ExitOnErr(TheJIT->addModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
-    printf("Module %s has been add to JIT\n", InputFilell.c_str());
-    return nullptr;
+  ExitOnErr(TheJIT->addModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
+  printf("Module %s has been add to JIT\n", InputFilell.c_str());
+  return nullptr;
 }
 
 int main(int argc, char **argv)
