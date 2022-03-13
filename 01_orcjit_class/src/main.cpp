@@ -27,6 +27,8 @@ Usage:
 #include <dirent.h>
 #include <sys/stat.h>
 #include <set>
+#include <vector>
+#include <pthread.h>
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -51,30 +53,26 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static ExitOnError ExitOnErr;
 
-void AddModule(std::string InputFile, char **argv){
+std::string Progn = "";
+
+pthread_mutex_t mutex_x=PTHREAD_MUTEX_INITIALIZER;
+
+std::vector<std::string> InputFileArr;
+std::set<std::string> fn;
+
+void* AddModule(void* fn){
+  std::string InputFile = (char*)fn;
   SMDiagnostic Err;
     auto Ctx = std::make_unique<LLVMContext>();
     std::string InputFilell = InputFile;
     if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
     {
-      InputFilell = InputFile + ".ll";
+      InputFilell += ".ll";
       FILE *cmdp = NULL;
-      if(!access(InputFilell.c_str(),F_OK)){
-        std::string rmcmd = "rm " + InputFilell;
-        printf("%s\n",rmcmd.c_str());
-        cmdp = popen(rmcmd.c_str(), "r");
-        if (!cmdp)
-        {
-          perror("popen");
-          exit(EXIT_FAILURE);
-        }
-      }
       std::string cmd = "clang++ -S ";
       for (const auto& ClEmitFlag : ClEmitFlags)
         cmd += ClEmitFlag + " ";
       cmd += "-emit-llvm " + InputFile + " -O3 -o " + InputFilell;
-      while(!access(InputFilell.c_str(),F_OK));
-      cmdp = NULL;
       cmdp = popen(cmd.c_str(), "r");
       if (!cmdp)
       {
@@ -85,9 +83,8 @@ void AddModule(std::string InputFile, char **argv){
         printf("clang++: emit %s to %s\n", InputFile.c_str(), InputFilell.c_str());
       while(access(InputFilell.c_str(),F_OK));
     }
-    else if ((InputFile).substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
+    else if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
     {
-
       printf("%s: file format must be .cpp\n", InputFile.c_str());
       exit(-1);
     }
@@ -95,12 +92,13 @@ void AddModule(std::string InputFile, char **argv){
     auto M = parseIRFile(InputFilell, Err, *Ctx);
     if (!M)
     {
-      Err.print(argv[0], errs());
+      Err.print(Progn.c_str(), errs());
       exit(-1);
     }
 
     ExitOnErr(TheJIT->addModule(ThreadSafeModule(std::move(M), std::move(Ctx))));
     printf("Module %s has been add to JIT\n", InputFilell.c_str());
+    return nullptr;
 }
 
 int main(int argc, char **argv)
@@ -112,6 +110,8 @@ int main(int argc, char **argv)
   TheJIT = ExitOnErr(OrcJIT::Create(NumThreads));
   printf("\n--------   Adding Module  --------\n");
   cl::ParseCommandLineOptions(argc, argv, "OrcJIT");
+
+  Progn = argv[0];
 
   //add modules to jit
   for (const auto &InputFile : InputFiles)
@@ -125,29 +125,67 @@ int main(int argc, char **argv)
           perror("pdir error");
           exit(-1);
         }
-        std::set<std::string> fn;
         while((ptr=readdir(pdir))!=nullptr){
           if((!strncmp(ptr->d_name, ".", 1)) || (!strncmp(ptr->d_name, "..", 2)))
             continue;
 
           std::string filename=ptr->d_name;
+          std::string filenamell=filename+".ll";
           std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
-          if(suffix == ".cpp"){
-            fn.insert(filename);
-            AddModule(InputFile + filename, argv);
+          std::string ffname=filename.substr(0, filename.find_first_of('.'));
+          if(suffix == ".cpp" && !fn.count(filename.substr(0, filename.find_first_of('.')))){
+            fn.insert(ffname);
+            if(!access((InputFile+filenamell).c_str(),R_OK)){
+              FILE * fp, *fpll;
+              int fd,fdll;
+              struct stat buf, bufll;
+              fp=fopen((InputFile+filename).c_str(),"r");
+              fpll=fopen((InputFile+filenamell).c_str(),"r");
+              fd=fileno(fp);
+              fdll=fileno(fpll);
+              fstat(fd, &buf);
+              fstat(fdll, &bufll);
+              if(bufll.st_mtime>buf.st_mtime)
+                InputFileArr.push_back(InputFile+filenamell);
+              else
+                InputFileArr.push_back(InputFile+filename);
+            }
+            else
+              InputFileArr.push_back(filename);
+          }
+          else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.find_first_of('.')))){
+            fn.insert(ffname);
+            InputFileArr.push_back(InputFile+filename);
           }
         }
-        while((ptr=readdir(pdir))!=nullptr){
-          if((!strncmp(ptr->d_name, ".", 1)) || (!strncmp(ptr->d_name, "..", 2)))
-            continue;
-
-          std::string filename=ptr->d_name;
-          std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
-          if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 3)))
-            AddModule(InputFile + filename, argv);
-        }
       }else if(s.st_mode&S_IFREG){  //file
-        AddModule(InputFile.c_str(), argv);
+        std::string filename=InputFile;
+        std::string filenamell=filename+".ll";
+        std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
+        std::string ffname=filename.substr(0, filename.find_last_of('.'));
+        if(suffix == ".cpp"){
+            fn.insert(ffname);
+            if(!access(filenamell.c_str(),R_OK)){
+              FILE * fp, *fpll;
+              int fd,fdll;
+              struct stat buf, bufll;
+              fp=fopen(filename.c_str(),"r");
+              fpll=fopen(filenamell.c_str(),"r");
+              fd=fileno(fp);
+              fdll=fileno(fpll);
+              fstat(fd, &buf);
+              fstat(fdll, &bufll);
+              if(bufll.st_mtime>buf.st_mtime)
+                InputFileArr.push_back(filenamell);
+              else 
+                InputFileArr.push_back(filename);
+            }
+            else
+              InputFileArr.push_back(filename);
+          }
+          else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 7))){
+            InputFileArr.push_back(filename);
+          }
       }else{
         printf("stat: '%s' is neither a directionary nor a file, what is it???\n",InputFile.c_str());
         exit(-1);
@@ -157,8 +195,19 @@ int main(int argc, char **argv)
       printf("%s: Invalid file name/directionary\n",InputFile.c_str());
       exit(-1);
     }
-    
   }
+
+  auto pthread_p = std::make_unique<pthread_t[]>(InputFileArr.size());
+  for (int i = 0; i < InputFileArr.size();i++){
+    int f = pthread_create(&pthread_p[i], nullptr, AddModule,(void*)(InputFileArr[i].c_str()));
+    if (f) {
+      printf("pthread create error with pthread_create return %d\n",f);
+      exit(-1);
+    }
+  }
+  for (int i = 0; i < InputFileArr.size();i++)
+    pthread_join(pthread_p[i], nullptr);
+  printf("All threads have been done\n");
 
   // Look up the JIT'd function, cast it to main function pointer, then call it.
   auto MainSym = ExitOnErr(TheJIT->lookup("main"));

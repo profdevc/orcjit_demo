@@ -60,4 +60,4 @@ llvm_map_components_to_libnames(
 )
 
 # Link against LLVM libraries
-target_link_libraries(${PROJECT_NAME} ${llvm_libs})
+target_link_libraries(${PROJECT_NAME} pthread ${llvm_libs})
