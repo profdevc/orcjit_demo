@@ -57,6 +57,13 @@ pthread_mutex_t mutex_x=PTHREAD_MUTEX_INITIALIZER;
 std::vector<std::string> InputFileArr;
 std::set<std::string> fn;
 
+void* isleep(void* fn){
+  while(1){
+    sleep(1);
+    write(STDOUT_FILENO,".",sizeof("."));
+  }
+}
+
 void* AddModule(void* fn){
   std::string InputFile = (char*)fn;
   SMDiagnostic Err;
@@ -227,9 +234,20 @@ int main(int argc, char **argv)
   printf("All threads have been done\n");
 
   // Look up the JIT'd function, cast it to main function pointer, then call it.
+  pthread_t ifMain;
+  int ifMainRet=pthread_create(&ifMain,nullptr,isleep,nullptr);
+  if (ifMainRet) {
+    printf("pthread create error with pthread_create return %d\n",ifMainRet);
+    exit(-1);
+  }
+  printf("\n-- Finding symbols & compiling ---\n");
   auto MainSym = ExitOnErr(TheJIT->lookup("main"));
   auto Main =
       jitTargetAddressToFunction<int (*)(int, char *[])>(MainSym.getAddress());
+  if(pthread_cancel(ifMain)){
+    printf("pthread cancel error\n");
+    exit(-1);
+  }
 
   printf("\n----  Executing Module Main  -----\n");
   if(!runAsMain(Main, InputArgv, StringRef(InputFiles.front())))
