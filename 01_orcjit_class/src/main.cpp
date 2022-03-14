@@ -66,6 +66,17 @@ void* AddModule(void* fn){
   {
     InputFilell += ".ll";
     FILE *cmdp = NULL;
+    if(!access(InputFilell.c_str(),F_OK)){
+      std::string rmcmd = "rm " + InputFilell;
+      printf("%s\n",rmcmd.c_str());
+      cmdp = popen(rmcmd.c_str(), "r");
+      if (!cmdp)
+      {
+        perror("popen");
+        exit(EXIT_FAILURE);
+      }
+    }
+    while(!access(InputFilell.c_str(),F_OK));
     std::string cmd = "clang++ -S ";
     for (const auto& ClEmitFlag : ClEmitFlags)
       cmd += ClEmitFlag + " ";
