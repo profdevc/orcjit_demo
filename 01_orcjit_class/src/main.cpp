@@ -159,30 +159,31 @@ int main(int argc, char **argv)
         std::string filename=InputFile;
         std::string filenamell=filename+".ll";
         std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
-        std::string ffname=filename.substr(0, filename.find_last_of('.'));
+        std::string ffname=filename.substr(0, filename.find_first_of('.'));
         if(suffix == ".cpp"){
-            fn.insert(ffname);
-            if(!access(filenamell.c_str(),R_OK)){
-              FILE * fp, *fpll;
-              int fd,fdll;
-              struct stat buf, bufll;
-              fp=fopen(filename.c_str(),"r");
-              fpll=fopen(filenamell.c_str(),"r");
-              fd=fileno(fp);
-              fdll=fileno(fpll);
-              fstat(fd, &buf);
-              fstat(fdll, &bufll);
-              if(bufll.st_mtime>buf.st_mtime)
-                InputFileArr.push_back(filenamell);
-              else 
-                InputFileArr.push_back(filename);
-            }
-            else
+          fn.insert(ffname);
+          if(!access(filenamell.c_str(),R_OK)){
+            FILE * fp, *fpll;
+            int fd,fdll;
+            struct stat buf, bufll;
+            fp=fopen(filename.c_str(),"r");
+            fpll=fopen(filenamell.c_str(),"r");
+            fd=fileno(fp);
+            fdll=fileno(fpll);
+            fstat(fd, &buf);
+            fstat(fdll, &bufll);
+            if(bufll.st_mtime>buf.st_mtime)
+              InputFileArr.push_back(filenamell);
+            else 
               InputFileArr.push_back(filename);
           }
-          else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 7))){
+          else
             InputFileArr.push_back(filename);
-          }
+        }
+        else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 7))){
+          fn.insert(ffname);
+          InputFileArr.push_back(filename);
+        }
       }else{
         printf("stat: '%s' is neither a directionary nor a file, what is it???\n",InputFile.c_str());
         exit(-1);
