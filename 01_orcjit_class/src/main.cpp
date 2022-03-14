@@ -98,6 +98,55 @@ void* AddModule(void* fn){
   return nullptr;
 }
 
+std::string fileForInput(std::string filename, std::string InputFile=""){
+  std::string ffname=filename.substr(0, filename.find_first_of('.'));
+  std::string suffix=filename.substr(filename.find_first_of('.'), filename.length() - filename.find_first_of('.'));
+  std::string filenamell = ffname + ".cpp.ll";
+  std::string filenamecpp=ffname+".cpp";
+  if(suffix == ".cpp" && !fn.count(ffname)){
+    fn.insert(ffname);
+    if(!access((InputFile+filenamell).c_str(),R_OK)){
+      FILE * fp, *fpll;
+      int fd,fdll;
+      struct stat buf, bufll;
+      fp=fopen((InputFile+filename).c_str(),"r");
+      fpll=fopen((InputFile+filenamell).c_str(),"r");
+      fd=fileno(fp);
+      fdll=fileno(fpll);
+      fstat(fd, &buf);
+      fstat(fdll, &bufll);
+      if(bufll.st_mtime>buf.st_mtime)
+        return InputFile + filenamell;
+      else
+        return InputFile+filename;
+    }
+    else
+      return InputFile+filename;
+  }
+  else if(suffix == ".cpp.ll" && !fn.count(ffname)){
+    fn.insert(ffname);
+    if(!access((InputFile+filenamecpp).c_str(),R_OK)){
+      FILE * fp, *fpcpp;
+      int fd,fdcpp;
+      struct stat buf, bufcpp;
+      fp=fopen((InputFile+filename).c_str(),"r");
+      fpcpp=fopen((InputFile+filenamecpp).c_str(),"r");
+      fd=fileno(fp);
+      fdcpp=fileno(fpcpp);
+      fstat(fd, &buf);
+      fstat(fdcpp, &bufcpp);
+      if(bufcpp.st_mtime>buf.st_mtime)
+        return InputFile+filenamecpp;
+      else
+        return InputFile+filename;
+    }
+    else
+      return InputFile+filename;
+  }
+  else
+    return "";
+}
+
 int main(int argc, char **argv)
 {
   InitializeNativeTarget();
@@ -114,7 +163,7 @@ int main(int argc, char **argv)
   for (const auto &InputFile : InputFiles)
   {
     struct stat s;
-    if(stat(InputFile.c_str(),&s)==0){
+    if(stat(InputFile.c_str(),&s)==0){ //dir
       if(s.st_mode&S_IFDIR){
         DIR *pdir;
         struct dirent* ptr;
@@ -127,62 +176,21 @@ int main(int argc, char **argv)
             continue;
 
           std::string filename=ptr->d_name;
-          std::string filenamell=filename+".ll";
-          std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
-          std::string ffname=filename.substr(0, filename.find_first_of('.'));
-          if(suffix == ".cpp" && !fn.count(filename.substr(0, filename.find_first_of('.')))){
-            fn.insert(ffname);
-            if(!access((InputFile+filenamell).c_str(),R_OK)){
-              FILE * fp, *fpll;
-              int fd,fdll;
-              struct stat buf, bufll;
-              fp=fopen((InputFile+filename).c_str(),"r");
-              fpll=fopen((InputFile+filenamell).c_str(),"r");
-              fd=fileno(fp);
-              fdll=fileno(fpll);
-              fstat(fd, &buf);
-              fstat(fdll, &bufll);
-              if(bufll.st_mtime>buf.st_mtime)
-                InputFileArr.push_back(InputFile+filenamell);
-              else
-                InputFileArr.push_back(InputFile+filename);
-            }
-            else
-              InputFileArr.push_back(filename);
-          }
-          else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.find_first_of('.')))){
-            fn.insert(ffname);
-            InputFileArr.push_back(InputFile+filename);
+          std::string suffix=filename.substr(filename.find_first_of('.'), filename.length() - filename.find_first_of('.'));
+          if(suffix == ".cpp" || suffix == ".cpp.ll"){
+            std::string ret = fileForInput(filename, InputFile);
+            if(!ret.empty())
+              InputFileArr.push_back(ret);
           }
         }
       }else if(s.st_mode&S_IFREG){  //file
-        std::string filename=InputFile;
-        std::string filenamell=filename+".ll";
-        std::string suffix=filename.substr(filename.find_last_of('.'), filename.length() - filename.find_last_of('.'));
-        std::string ffname=filename.substr(0, filename.find_first_of('.'));
-        if(suffix == ".cpp"){
-          fn.insert(ffname);
-          if(!access(filenamell.c_str(),R_OK)){
-            FILE * fp, *fpll;
-            int fd,fdll;
-            struct stat buf, bufll;
-            fp=fopen(filename.c_str(),"r");
-            fpll=fopen(filenamell.c_str(),"r");
-            fd=fileno(fp);
-            fdll=fileno(fpll);
-            fstat(fd, &buf);
-            fstat(fdll, &bufll);
-            if(bufll.st_mtime>buf.st_mtime)
-              InputFileArr.push_back(filenamell);
-            else 
-              InputFileArr.push_back(filename);
-          }
-          else
-            InputFileArr.push_back(filename);
-        }
-        else if(suffix == ".ll" && !fn.count(filename.substr(0, filename.length() - 7))){
-          fn.insert(ffname);
-          InputFileArr.push_back(filename);
+        std::string path=InputFile.substr(0, InputFile.find_last_of('/'));
+        std::string filename=InputFile.substr(InputFile.find_last_of('/'), InputFile.length() - InputFile.find_last_of('/'));
+        std::string suffix=filename.substr(filename.find_first_of('.'), filename.length() - filename.find_first_of('.'));
+        if(suffix == ".cpp" || suffix == ".cpp.ll"){
+          std::string ret = fileForInput(filename, path);
+          if(!ret.empty())
+            InputFileArr.push_back(ret);
         }
       }else{
         printf("stat: '%s' is neither a directionary nor a file, what is it???\n",InputFile.c_str());
