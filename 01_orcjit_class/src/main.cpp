@@ -72,7 +72,7 @@ void* AddModule(void* fn){
   if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) == ".cpp")
   {
     InputFilell += ".ll";
-    FILE *cmdp = NULL;
+    FILE *cmdp = nullptr;
     if(!access(InputFilell.c_str(),F_OK)){
       std::string rmcmd = "rm " + InputFilell;
       printf("%s\n",rmcmd.c_str());
@@ -82,6 +82,8 @@ void* AddModule(void* fn){
         perror("popen");
         exit(EXIT_FAILURE);
       }
+      pclose(cmdp);
+      cmdp=nullptr;
     }
     while(!access(InputFilell.c_str(),F_OK));
     std::string cmd = "clang++ -S ";
@@ -96,6 +98,8 @@ void* AddModule(void* fn){
     }
     else
       printf("clang++: emit %s to %s\n", InputFile.c_str(), InputFilell.c_str());
+    pclose(cmdp);
+    cmdp=nullptr;
     while(access(InputFilell.c_str(),F_OK));
   }
   else if (InputFile.substr(InputFile.find_last_of('.'), InputFile.length() - InputFile.find_last_of('.')) != ".ll")
@@ -121,42 +125,33 @@ std::string fileForInput(std::string filename, std::string InputFile=""){
   std::string suffix=filename.substr(filename.find_first_of('.'), filename.length() - filename.find_first_of('.'));
   std::string filenamell = ffname + ".cpp.ll";
   std::string filenamecpp=ffname+".cpp";
-  if(suffix == ".cpp" && !fn.count(ffname)){
+  if(!fn.count(ffname) && (suffix == ".cpp" || suffix == ".cpp.ll")){
     fn.insert(ffname);
-    if(!access((InputFile+filenamell).c_str(),R_OK)){
-      FILE * fp, *fpll;
-      int fd,fdll;
-      struct stat buf, bufll;
-      fp=fopen((InputFile+filename).c_str(),"r");
-      fpll=fopen((InputFile+filenamell).c_str(),"r");
-      fd=fileno(fp);
-      fdll=fileno(fpll);
-      fstat(fd, &buf);
-      fstat(fdll, &bufll);
-      if(bufll.st_mtime>buf.st_mtime)
-        return InputFile + filenamell;
-      else
-        return InputFile+filename;
-    }
-    else
-      return InputFile+filename;
-  }
-  else if(suffix == ".cpp.ll" && !fn.count(ffname)){
-    fn.insert(ffname);
-    if(!access((InputFile+filenamecpp).c_str(),R_OK)){
-      FILE * fp, *fpcpp;
-      int fd,fdcpp;
-      struct stat buf, bufcpp;
-      fp=fopen((InputFile+filename).c_str(),"r");
-      fpcpp=fopen((InputFile+filenamecpp).c_str(),"r");
-      fd=fileno(fp);
-      fdcpp=fileno(fpcpp);
-      fstat(fd, &buf);
-      fstat(fdcpp, &bufcpp);
-      if(bufcpp.st_mtime>buf.st_mtime)
-        return InputFile+filenamecpp;
-      else
-        return InputFile+filename;
+    if(!access((InputFile+filenamell).c_str(),R_OK)&&!access((InputFile+filenamecpp).c_str(),R_OK)){
+      FILE *cmdp = nullptr;
+      std::string cmd = "python3 ../src/cppHeaderParser.py ";
+      cmd += InputFile+filenamecpp;
+      cmdp = popen(cmd.c_str(), "r");
+      if (!cmdp)
+      {
+        perror("popen");
+        exit(EXIT_FAILURE);
+      }
+      else{
+        char res[4];
+        fgets(res, 4, cmdp);
+        std::string r = res;
+        if (r == "lll")
+          return InputFile + filenamell;
+        else if(r=="cpp")
+          return InputFile + filenamecpp;
+        else{
+          printf("error when getting python return value with %s\n",r.c_str());
+          exit(-1);
+        }
+      }
+      pclose(cmdp);
+      cmdp=nullptr;
     }
     else
       return InputFile+filename;
