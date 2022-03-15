@@ -58,9 +58,14 @@ std::vector<std::string> InputFileArr;
 std::set<std::string> fn;
 
 void* isleep(void* fn){
+  int i = 0;
   while(1){
+    write(STDOUT_FILENO,"\rwaiting... ",sizeof("\rwaiting... "));
+    std::string tmp = std::to_string(i);
+    write(STDOUT_FILENO, tmp.c_str(), tmp.length());
+    write(STDOUT_FILENO, "s", sizeof("s"));
     sleep(1);
-    write(STDOUT_FILENO,".",sizeof("."));
+    i++;
   }
 }
 
@@ -244,7 +249,7 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-  printf("\n----  Executing Module Main  -----\n");
+  printf("\n\n----  Executing Module Main  -----\n");
   if(!runAsMain(Main, InputArgv, StringRef(InputFiles.front())))
   printf("\n---------  End Execution  --------\n\n");
   return 0;
