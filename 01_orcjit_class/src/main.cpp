@@ -234,13 +234,13 @@ int main(int argc, char **argv)
   printf("All threads have been done\n");
 
   // Look up the JIT'd function, cast it to main function pointer, then call it.
+  printf("\n-- Finding symbols & compiling ---\n");
   pthread_t ifMain;
   int ifMainRet=pthread_create(&ifMain,nullptr,isleep,nullptr);
   if (ifMainRet) {
     printf("pthread create error with pthread_create return %d\n",ifMainRet);
     exit(-1);
   }
-  printf("\n-- Finding symbols & compiling ---\n");
   auto MainSym = ExitOnErr(TheJIT->lookup("main"));
   auto Main =
       jitTargetAddressToFunction<int (*)(int, char *[])>(MainSym.getAddress());
